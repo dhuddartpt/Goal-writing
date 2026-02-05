@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic PT Goal Laboratory</title>
+    <style>
+        :root { --primary: #2c3e50; --success: #27ae60; --error: #c0392b; --warning: #f39c12; }
+        body { font-family: 'Georgia', serif; background-color: #f4f4f9; padding: 20px; line-height: 1.6; }
+        .container { max-width: 850px; margin: auto; background: white; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: var(--primary); border-bottom: 3px double var(--primary); padding-bottom: 10px; margin-bottom: 30px; }
+        .box { background: #f9f9f9; border: 1px solid #ddd; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        label { font-weight: bold; display: block; margin-bottom: 8px; color: var(--primary); }
+        select, textarea { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px; }
+        textarea { height: 100px; background: transparent; position: relative; z-index: 2; }
+        .feedback-area { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 20px; }
+        .indicator { padding: 10px; border-left: 5px solid #ccc; background: #eee; font-size: 0.9em; transition: 0.3s; }
+        .pass { border-left-color: var(--success); background: #e8f5e9; }
+        .fail { border-left-color: var(--error); background: #ffebee; }
+        .abbrev-alert { color: var(--error); font-weight: bold; display: none; margin-top: 10px; font-size: 0.85em; }
+        .btn { background: var(--primary); color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; transition: 0.3s; }
+        .btn:hover { background: #34495e; }
+        .rule-reminder { font-size: 0.8em; color: #666; font-style: italic; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Clinical Goal-Writing Laboratory</h1>
+
+    <div class="box">
+        <label>1. Current Problem List (Randomized)</label>
+        <select id="problemSelect" onchange="updateProblemType()">
+            </select>
+        <button class="btn" style="margin-top:10px; background:#7f8c8d;" onclick="generateNewProblemList()">Generate New Problem List</button>
+    </div>
+
+    <div class="box">
+        <label>2. Goal Formulation</label>
+        <div id="abbrevMsg" class="abbrev-alert">⚠️ PROHIBITED: Abbreviations detected. Use full clinical terminology.</div>
+        <textarea id="goalInput" oninput="analyzeGoal()" 
+            placeholder="Example: Mr. McCarthy (A) will walk (B) in hospital corridor with rolling walker (C) for 100 feet in less than 2 minutes (D) within 1 week (E)."></textarea>
+        <div class="rule-reminder">
+            * No abbreviations allowed (e.g., use "weeks" instead of "wks"). <br>
+            * For Impairment goals, the Actor (A) is considered implicit.
+        </div>
+    </div>
+
+    <div class="feedback-area">
+        <div id="compA" class="indicator"><strong>(A) Actor:</strong> Target Individual</div>
+        <div id="compB" class="indicator"><strong>(B) Behavior:</strong> Specific Task</div>
+        <div id="compC" class="indicator"><strong>(C) Condition:</strong> Context/Support</div>
+        <div id="compD" class="indicator"><strong>(D) Degree:</strong> Quantitative Measure</div>
+        <div id="compE" class="indicator"><strong>(E) Expected Time:</strong> Timeframe</div>
+    </div>
+</div>
+
+<script>
+    const database = {
+        participation: [
+            "Return to full-time employment as a construction foreman",
+            "Perform independent shopping at the local grocery store",
+            "Resume weekly volunteer duties at the community center",
+            "Participate in 18 holes of golf with peers",
+            "Provide primary childcare for two toddlers at home"
+        ],
+        activity: [
+            "Ascend and descend 12 standard stairs",
+            "Transfer from floor to standing position",
+            "Ambulatory distance on uneven outdoor terrain",
+            "Perform overhead reaching into high kitchen cabinets",
+            "Maneuver a manual wheelchair in community settings"
+        ],
+        impairment: [
+            "Passive range of motion for knee flexion",
+            "Manual muscle test grade for shoulder abduction",
+            "Static single limb balance on the right lower extremity",
+            "Pain intensity during weight-bearing activities",
+            "Circumferential measurement of thigh edema"
+        ]
+    };
+
+    function generateNewProblemList() {
+        const select = document.getElementById('problemSelect');
+        select.innerHTML = '<option value="" disabled selected>Select a randomized deficit...</option>';
+        
+        ['participation', 'activity', 'impairment'].forEach(category => {
+            const group = document.createElement('optgroup');
+            group.label = category.charAt(0).toUpperCase() + category.slice(1);
+            
+            // Randomize and pick 2 unique items per category for the list
+            const shuffled = [...database[category]].sort(() => 0.5 - Math.random());
+            const selected = shuffled.slice(0, 2);
+            
+            selected.forEach(item => {
+                const opt = document.createElement('option');
+                opt.value = category;
+                opt.textContent = item;
+                group.appendChild(opt);
+            });
+            select.appendChild(group);
+        });
+        resetFeedback();
+    }
+
+    function analyzeGoal() {
+        const text = document.getElementById('goalInput').value.toLowerCase();
+        const type = document.getElementById('problemSelect').value;
+        const abbrevMsg = document.getElementById('abbrevMsg');
+
+        // 1. Abbreviation Check
+        const banned = ['pt', 'rom', 'wk', 'wks', 'min', 'ft', 'sec', 'lb', 'lbs', 'mmt', 'walker', 'a ', 'mod', 'max'];
+        const hasAbbrev = banned.some(b => new RegExp('\\b' + b + '\\b').test(text));
+        abbrevMsg.style.display = hasAbbrev ? 'block' : 'none';
+
+        // 2. Component Logic
+        const hasA = /\b(mr|ms|mrs|patient|individual|client|he|she|rasheed|mccarthy|fox|samson)\b/i.test(text);
+        const hasB = /\b(will|increase|decrease|improve|walk|climb|reach|perform|flexion|strength|balance)\b/i.test(text);
+        const hasC = /\b(with|in|at|on|using|assistance|surface|corridor|home|work)\b/i.test(text);
+        const hasD = (/\b(feet|minutes|degrees|seconds|percent|grade|points|cm|centimeters|times)\b/i.test(text)) || /\d+/.test(text);
+        const hasE = (/\b(within|in)\b/i.test(text)) && (/\b(week|weeks|month|months|days)\b/i.test(text));
+
+        // 3. Update Indicators (Note: Implicit Actor rule for Impairment)
+        updateComp('compA', (type === 'impairment' || hasA), (type === 'impairment' && !hasA));
+        updateComp('compB', hasB);
+        updateComp('compC', hasC);
+        updateComp('compD', hasD);
+        updateComp('compE', hasE);
+    }
+
+    function updateComp(id, passed, isImplicit = false) {
+        const el = document.getElementById(id);
+        el.className = passed ? 'indicator pass' : 'indicator fail';
+        if (id === 'compA' && isImplicit) {
+            el.innerHTML = "<strong>(A) Actor:</strong> Implicit (Impairment Rule)";
+        } else if (id === 'compA') {
+            el.innerHTML = "<strong>(A) Actor:</strong> Target Individual";
+        }
+    }
+
+    function resetFeedback() {
+        document.getElementById('goalInput').value = '';
+        document.querySelectorAll('.indicator').forEach(el => el.className = 'indicator');
+        document.getElementById('abbrevMsg').style.display = 'none';
+    }
+
+    // Initialize list on load
+    window.onload = generateNewProblemList;
+</script>
+
+</body>
+</html>
